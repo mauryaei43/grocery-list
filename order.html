@@ -201,7 +201,19 @@
     totalAmount.textContent = '\u20b9' + (Math.round(total * 100) / 100);
   }
 
-  function buildReplyText(){
+  async function shortenUrl(longUrl){
+    try{
+      var resp = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(longUrl));
+      if(!resp.ok) throw new Error('bad response');
+      var text = (await resp.text()).trim();
+      if(text.indexOf('https://is.gd/') === 0 || text.indexOf('http://is.gd/') === 0) return text;
+      throw new Error('invalid short url');
+    }catch(e){
+      return longUrl;
+    }
+  }
+
+  async function buildReplyText(){
     var lines = ['Price reply' + (data.name ? (' for ' + data.name) : '') + ':', ''];
     var total = 0;
     var itemsForConfirm = [];
@@ -236,15 +248,18 @@
       };
       var encoded = encodeURIComponent(b64EncodeUnicode(JSON.stringify(confirmPayload)));
       var confirmUrl = new URL('confirm.html', window.location.href).href + '?d=' + encoded;
+      var shortConfirmUrl = await shortenUrl(confirmUrl);
       lines.push('');
-      lines.push('Please confirm your order:');
-      lines.push(confirmUrl);
+      lines.push('Confirm order: ' + shortConfirmUrl);
     }
     return lines.join('\n');
   }
 
-  sendBtn.onclick = function(){
-    var text = buildReplyText();
+  sendBtn.onclick = async function(){
+    sendBtn.disabled = true;
+    showToast('Preparing your reply...');
+    var text = await buildReplyText();
+    sendBtn.disabled = false;
     var mobile = (data.mobile || '').replace(/[^0-9]/g, '');
     if(mobile.length === 10) mobile = '91' + mobile;
     if(mobile.length >= 11){
@@ -255,7 +270,7 @@
   };
 
   copyBtn.onclick = async function(){
-    var text = buildReplyText();
+    var text = await buildReplyText();
     try{
       await navigator.clipboard.writeText(text);
       showToast('Copied — paste it in your reply message');
