@@ -1639,11 +1639,15 @@
 
   async function shortenUrl(longUrl){
     try{
-      var resp = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(longUrl));
+      var resp = await fetch('https://cleanuri.com/api/v1/shorten', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'url=' + encodeURIComponent(longUrl)
+      });
       if(!resp.ok) throw new Error('bad response');
-      var text = (await resp.text()).trim();
-      if(text.indexOf('https://is.gd/') === 0 || text.indexOf('http://is.gd/') === 0) return text;
-      throw new Error('invalid short url');
+      var data = await resp.json();
+      if(data && data.result_url) return data.result_url;
+      throw new Error('no result_url');
     }catch(e){
       return longUrl;
     }
