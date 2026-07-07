@@ -466,11 +466,32 @@
   #modalCancel{background:var(--bg); color:var(--muted); border:2px solid var(--line);}
   #modalConfirm{background:var(--leaf); color:#fff;}
   .share-modal-card{max-width:400px;}
+  .share-mode-toggle{
+    display:flex;
+    gap:8px;
+    margin-bottom:12px;
+    background:var(--bg);
+    border-radius:12px;
+    padding:4px;
+  }
+  .share-mode-btn{
+    flex:1;
+    height:40px;
+    border-radius:9px;
+    border:none;
+    background:none;
+    color:var(--muted);
+    font-weight:700;
+    font-size:13px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .share-mode-btn.active{background:var(--leaf); color:#fff;}
   .share-modal-sub{
     font-size:13px;
     color:var(--muted);
     font-weight:600;
-    margin:-6px 0 14px;
+    margin:0 0 14px;
   }
   .share-profile-toggle{
     display:flex;
@@ -960,7 +981,13 @@
 <div class="modal-overlay" id="shareModalOverlay">
   <div class="modal-card share-modal-card">
     <h3>Prepare list to share</h3>
-    <div class="share-modal-sub">Prices will be entered by the shopkeeper on a link — no need to type amounts here.</div>
+
+    <div class="share-mode-toggle" id="shareModeToggle">
+      <button class="share-mode-btn active" data-mode="individual" type="button">Send to a person</button>
+      <button class="share-mode-btn" data-mode="shopkeeper" type="button">Send to shopkeeper</button>
+    </div>
+
+    <div class="share-modal-sub" id="shareModalSub">Just the item list will be sent — quick and simple.</div>
 
     <div class="share-profile-toggle" id="shareProfileToggle">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--leaf)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
@@ -971,7 +998,7 @@
         <label for="profName">Your name</label>
         <input id="profName" type="text" placeholder="e.g. Rahul Maurya" />
       </div>
-      <div class="modal-field">
+      <div class="modal-field" id="profMobileField">
         <label for="profMobile">Mobile number (needed for reply-back)</label>
         <input id="profMobile" type="tel" placeholder="e.g. 9876543210" />
       </div>
@@ -1481,8 +1508,32 @@
   var profAddress = document.getElementById('profAddress');
   var profRemember = document.getElementById('profRemember');
   var profSaveBtn = document.getElementById('profSaveBtn');
+  var shareModeToggle = document.getElementById('shareModeToggle');
+  var shareModalSub = document.getElementById('shareModalSub');
+  var previewOrderBtnRef = null;
+  var shareMode = 'individual';
   var CATEGORY_ORDER = ['Vegetables', 'Groceries', 'Sanitary and household', 'Other essentials', 'Other items'];
   var PROFILE_KEY = 'parchi-user-profile';
+
+  function applyShareMode(){
+    var btns = shareModeToggle.querySelectorAll('.share-mode-btn');
+    btns.forEach(function(b){ b.classList.toggle('active', b.dataset.mode === shareMode); });
+    var previewBtn = document.getElementById('previewOrderBtn');
+    if(shareMode === 'shopkeeper'){
+      shareModalSub.textContent = 'Prices will be entered by the shopkeeper on a link — no need to type amounts here.';
+      previewBtn.style.display = 'block';
+    }else{
+      shareModalSub.textContent = 'Just the item list will be sent — quick and simple.';
+      previewBtn.style.display = 'none';
+    }
+  }
+
+  shareModeToggle.addEventListener('click', function(e){
+    var btn = e.target.closest('.share-mode-btn');
+    if(!btn) return;
+    shareMode = btn.dataset.mode;
+    applyShareMode();
+  });
 
   shareProfileToggle.onclick = function(){
     var open = shareProfileFields.style.display !== 'none';
@@ -1531,6 +1582,8 @@
     if(pending.length === 0){ showToast('Nothing pending to share.'); return; }
 
     loadProfile();
+    shareMode = 'individual';
+    applyShareMode();
 
     var byCat = {};
     CATEGORY_ORDER.forEach(function(c){ byCat[c] = []; });
@@ -1584,6 +1637,18 @@
     return new URL('order.html', window.location.href).href + '?d=' + encoded;
   }
 
+  async function shortenUrl(longUrl){
+    try{
+      var resp = await fetch('https://is.gd/create.php?format=simple&url=' + encodeURIComponent(longUrl));
+      if(!resp.ok) throw new Error('bad response');
+      var text = (await resp.text()).trim();
+      if(text.indexOf('https://is.gd/') === 0 || text.indexOf('http://is.gd/') === 0) return text;
+      throw new Error('invalid short url');
+    }catch(e){
+      return longUrl;
+    }
+  }
+
   var previewOrderBtn = document.getElementById('previewOrderBtn');
   previewOrderBtn.onclick = function(){
     var pending = items.filter(function(i){ return !i.done; });
@@ -1596,20 +1661,43 @@
     window.open(url, '_blank');
   };
 
+  function buildCategorizedItemLines(pending){
+    var byCat = {};
+    CATEGORY_ORDER.forEach(function(c){ byCat[c] = []; });
+    pending.forEach(function(i){
+      var cat = i.category && byCat[i.category] ? i.category : 'Other items';
+      byCat[cat].push(i);
+    });
+    var lines = [];
+    CATEGORY_ORDER.forEach(function(cat){
+      if(byCat[cat].length === 0) return;
+      lines.push(cat + ':');
+      byCat[cat].forEach(function(i, idx){
+        lines.push((idx + 1) + '. ' + i.text);
+      });
+      lines.push('');
+    });
+    return lines;
+  }
+
   shareModalConfirm.onclick = async function(){
     var profile = await saveProfile();
     var pending = items.filter(function(i){ return !i.done; });
-    var orderUrl = buildOrderUrl(profile, pending);
+    var lines = [];
 
-    var lines = ['Grocery List', ''];
-    if(profile.name || profile.mobile || profile.address){
-      if(profile.name) lines.push('From: ' + profile.name);
+    if(shareMode === 'shopkeeper'){
+      var orderUrl = buildOrderUrl(profile, pending);
+      var shortUrl = await shortenUrl(orderUrl);
+      lines.push('Grocery List' + (profile.name ? (' - from ' + profile.name) : ''));
       if(profile.mobile) lines.push('Mobile: ' + profile.mobile);
       if(profile.address) lines.push('Address: ' + profile.address);
       lines.push('');
+      lines.push('Enter prices here: ' + shortUrl);
+    }else{
+      lines.push('Grocery List' + (profile.name ? (' - from ' + profile.name) : ''));
+      lines.push('');
+      lines = lines.concat(buildCategorizedItemLines(pending));
     }
-    lines.push('Tap the link to enter prices and send back the total:');
-    lines.push(orderUrl);
     var text = lines.join('\n').trim();
 
     if(navigator.share){
