@@ -1615,6 +1615,8 @@
   shareModalCancel.onclick = function(){ shareModalOverlay.classList.remove('open'); };
   shareModalOverlay.onclick = function(e){ if(e.target === shareModalOverlay) shareModalOverlay.classList.remove('open'); };
 
+  var CATEGORY_CODES = { 'Vegetables':'V', 'Groceries':'G', 'Sanitary and household':'S', 'Other essentials':'E', 'Other items':'O' };
+
   function buildOrderUrl(profile, pending){
     var byCat = {};
     CATEGORY_ORDER.forEach(function(c){ byCat[c] = []; });
@@ -1625,13 +1627,12 @@
     var catsPayload = {};
     CATEGORY_ORDER.forEach(function(cat){
       if(byCat[cat].length === 0) return;
-      catsPayload[cat] = byCat[cat].map(function(i){ return i.text; });
+      catsPayload[CATEGORY_CODES[cat]] = byCat[cat].map(function(i){ return i.text; });
     });
     var payload = {
-      name: profile.name || '',
-      mobile: profile.mobile || '',
-      address: profile.address || '',
-      cats: catsPayload
+      n: profile.name || '',
+      m: profile.mobile || '',
+      c: catsPayload
     };
     var encoded = encodeURIComponent(b64EncodeUnicode(JSON.stringify(payload)));
     return new URL('order.html', window.location.href).href + '?d=' + encoded;
@@ -1696,6 +1697,7 @@
       if(profile.mobile) lines.push('Mobile: ' + profile.mobile);
       if(profile.address) lines.push('Address: ' + profile.address);
       lines.push('');
+      lines = lines.concat(buildCategorizedItemLines(pending));
       lines.push('Click to reply and pricing of items: ' + shortUrl);
     }else{
       lines.push('Grocery List' + (profile.name ? (' - from ' + profile.name) : ''));
