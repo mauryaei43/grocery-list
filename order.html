@@ -22,6 +22,16 @@
     padding:12px 14px; margin-bottom:16px; font-size:14px; font-weight:700;
   }
   .from-card div{color:var(--muted); font-weight:600; font-size:13px; margin-top:2px;}
+  .shop-fields-card{
+    background:var(--sage); border-radius:14px; padding:12px 14px; margin-bottom:16px;
+  }
+  .shop-fields-label{font-size:12px; font-weight:700; color:var(--leaf); margin-bottom:8px;}
+  .shop-fields-card input{
+    width:100%; height:42px; border-radius:10px; border:2px solid var(--line);
+    padding:0 12px; font-size:14px; font-family:inherit; margin-bottom:8px; background:#fff;
+  }
+  .shop-fields-card input:last-child{margin-bottom:0;}
+  .shop-fields-card input:focus{outline:none; border-color:var(--leaf-light);}
   .cat-label{
     font-size:12px; font-weight:800; color:var(--leaf); text-transform:uppercase;
     letter-spacing:0.03em; margin:16px 0 8px;
@@ -72,6 +82,11 @@
 
 <main>
   <div id="fromCard" class="from-card" style="display:none;"></div>
+  <div id="shopFieldsCard" class="shop-fields-card" style="display:none;">
+    <div class="shop-fields-label">Your shop name / number (optional, needed so the customer's confirmation reaches you)</div>
+    <input id="shopName" type="text" placeholder="Shop name" />
+    <input id="shopMobile" type="tel" placeholder="Your WhatsApp number" />
+  </div>
   <div id="itemsArea"></div>
   <div id="totalRow" class="total-row" style="display:none;">
     <span>Total</span>
@@ -91,6 +106,11 @@
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
   }
+  function b64EncodeUnicode(str){
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1){
+      return String.fromCharCode('0x' + p1);
+    }));
+  }
 
   var toastEl = document.getElementById('toast');
   function showToast(msg){
@@ -108,6 +128,9 @@
 
   var itemsArea = document.getElementById('itemsArea');
   var fromCard = document.getElementById('fromCard');
+  var shopFieldsCard = document.getElementById('shopFieldsCard');
+  var shopName = document.getElementById('shopName');
+  var shopMobile = document.getElementById('shopMobile');
   var totalRow = document.getElementById('totalRow');
   var totalAmount = document.getElementById('totalAmount');
   var sendBtn = document.getElementById('sendBtn');
@@ -125,6 +148,7 @@
       fromCard.innerHTML = bits.join('');
       fromCard.style.display = 'block';
     }
+    shopFieldsCard.style.display = 'block';
 
     Object.keys(data.cats).forEach(function(cat){
       var label = document.createElement('div');
@@ -180,6 +204,7 @@
   function buildReplyText(){
     var lines = ['Price reply' + (data.name ? (' for ' + data.name) : '') + ':', ''];
     var total = 0;
+    var itemsForConfirm = [];
     itemsArea.querySelectorAll('.item-row').forEach(function(row){
       var amtInp = row.querySelector('.item-amount');
       var qtyInp = row.querySelector('.item-qty');
@@ -192,12 +217,29 @@
         line += ' - \u20b9' + v;
         lines.push(line);
         total += v;
+        itemsForConfirm.push({ n: amtInp.dataset.name, q: qtyVal, a: v });
       }
     });
+    total = Math.round(total * 100) / 100;
     lines.push('');
-    lines.push('Total: \u20b9' + (Math.round(total * 100) / 100));
+    lines.push('Total: \u20b9' + total);
     lines.push('');
     lines.push('Thank you so much for choosing us for your shopping!');
+
+    if(total > 0){
+      var confirmPayload = {
+        shopName: shopName.value.trim(),
+        shopMobile: shopMobile.value.trim(),
+        customerName: data.name || '',
+        total: total,
+        items: itemsForConfirm
+      };
+      var encoded = encodeURIComponent(b64EncodeUnicode(JSON.stringify(confirmPayload)));
+      var confirmUrl = new URL('confirm.html', window.location.href).href + '?d=' + encoded;
+      lines.push('');
+      lines.push('Please confirm your order:');
+      lines.push(confirmUrl);
+    }
     return lines.join('\n');
   }
 
