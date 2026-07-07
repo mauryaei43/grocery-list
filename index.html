@@ -739,6 +739,38 @@
   .row-add-btn:active{background:var(--leaf); color:#fff;}
   .no-history{color:var(--muted); font-size:14px; font-weight:600; text-align:center; padding:12px 0;}
 
+  #aiSuggestPanel{display:none; margin-top:20px; border-top:2px solid var(--line); padding-top:16px;}
+  #aiSuggestPanel.open{display:block;}
+  #aiSuggestPanel h2{font-size:16px; font-weight:800; margin:0 0 8px;}
+  .ai-sub{font-size:13px; color:var(--muted); font-weight:600; margin-bottom:14px;}
+  .ai-row{
+    display:flex; align-items:flex-start; gap:10px; background:var(--card);
+    border:2px solid var(--line); border-radius:14px; padding:12px; margin-bottom:8px;
+  }
+  .ai-row.overdue{border-color:#f0c7b3; background:var(--amber-bg);}
+  .ai-check{
+    width:22px; height:22px; border-radius:6px; border:2.5px solid var(--leaf);
+    flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; background:#fff;
+  }
+  .ai-check.checked{background:var(--leaf);}
+  .ai-check svg{opacity:0;}
+  .ai-check.checked svg{opacity:1;}
+  .ai-row-main{flex:1;}
+  .ai-row-name{font-size:15px; font-weight:800; color:var(--charcoal);}
+  .ai-row-meta{font-size:12px; color:var(--muted); font-weight:600; margin-top:2px;}
+  .ai-badge{
+    display:inline-block; font-size:10px; font-weight:800; padding:2px 8px; border-radius:999px;
+    margin-top:4px; text-transform:uppercase; letter-spacing:0.02em;
+  }
+  .ai-badge.overdue{background:var(--tomato); color:#fff;}
+  .ai-badge.due{background:var(--turmeric); color:#fff;}
+  #aiAddSelectedBtn{
+    width:100%; height:48px; border-radius:14px; border:none; background:var(--leaf);
+    color:#fff; font-weight:800; font-size:15px; cursor:pointer; font-family:inherit; margin-top:8px;
+  }
+  #aiAddSelectedBtn:active{background:var(--leaf-light);}
+
   #expensePanel{display:none; margin-top:20px; border-top:2px solid var(--line); padding-top:16px;}
   #expensePanel.open{display:block;}
   #expensePanel h2{font-size:16px; font-weight:800; margin:0 0 12px;}
@@ -828,6 +860,9 @@
     </button>
     <button id="historyBtn" aria-label="View past months">
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+    </button>
+    <button id="aiSuggestBtn" aria-label="Monthly AI suggestions">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
     <button id="expenseBtn" aria-label="Expense tracker">
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -954,6 +989,13 @@
 
     <div id="expChart" class="exp-chart"></div>
     <div id="expList" class="exp-list"></div>
+  </div>
+
+  <div id="aiSuggestPanel">
+    <h2>Monthly Suggestions</h2>
+    <div class="ai-sub">Based on how often you've bought each item before, here's what you're likely running low on this month.</div>
+    <div id="aiSuggestList"></div>
+    <button id="aiAddSelectedBtn" style="display:none;">Add selected items</button>
   </div>
 </main>
 
@@ -1954,6 +1996,106 @@
       historyListEl.appendChild(block);
     });
   }
+
+  var aiSuggestBtn = document.getElementById('aiSuggestBtn');
+  var aiSuggestPanel = document.getElementById('aiSuggestPanel');
+  var aiSuggestListEl = document.getElementById('aiSuggestList');
+  var aiAddSelectedBtn = document.getElementById('aiAddSelectedBtn');
+  var aiSelectedKeys = {};
+
+  function computeMonthlySuggestions(){
+    var groups = {};
+    history.forEach(function(h){
+      if(!groups[h.name]) groups[h.name] = { text: h.text, dates: [] };
+      groups[h.name].dates.push(h.date);
+      groups[h.name].text = h.text;
+    });
+    var activeNames = {};
+    items.forEach(function(i){ if(!i.done) activeNames[normalize(i.text)] = true; });
+
+    var today = todayISO();
+    var suggestions = [];
+    Object.keys(groups).forEach(function(name){
+      if(activeNames[name]) return;
+      var dates = groups[name].dates.slice().sort();
+      if(dates.length < 2) return;
+      var intervals = [];
+      for(var k=1;k<dates.length;k++){
+        intervals.push(daysBetween(dates[k-1], dates[k]));
+      }
+      var avg = Math.round(intervals.reduce(function(a,b){return a+b;},0) / intervals.length);
+      if(avg <= 0) avg = 1;
+      var last = dates[dates.length-1];
+      var since = daysBetween(last, today);
+      var ratio = since / avg;
+      var monthlyFreq = Math.round((30 / avg) * 10) / 10;
+      if(ratio >= 0.5){
+        suggestions.push({
+          name: name, text: groups[name].text, avg: avg, since: since,
+          ratio: ratio, monthlyFreq: monthlyFreq, overdue: ratio >= 1,
+          timesBoughtTotal: dates.length
+        });
+      }
+    });
+    suggestions.sort(function(a,b){ return b.ratio - a.ratio; });
+    return suggestions;
+  }
+
+  function renderAiSuggestPanel(){
+    var sugg = computeMonthlySuggestions();
+    aiSuggestListEl.innerHTML = '';
+    if(sugg.length === 0){
+      aiSuggestListEl.innerHTML = '<div class="no-history">Not enough purchase history yet. Once you\'ve ticked off a few items as bought over a couple of months, suggestions will appear here.</div>';
+      aiAddSelectedBtn.style.display = 'none';
+      return;
+    }
+    sugg.forEach(function(s){
+      var row = document.createElement('div');
+      row.className = 'ai-row' + (s.overdue ? ' overdue' : '');
+      var check = document.createElement('div');
+      check.className = 'ai-check' + (aiSelectedKeys[s.name] ? ' checked' : '');
+      check.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+      check.onclick = function(){
+        if(aiSelectedKeys[s.name]) delete aiSelectedKeys[s.name];
+        else aiSelectedKeys[s.name] = s.text;
+        renderAiSuggestPanel();
+      };
+      var main = document.createElement('div');
+      main.className = 'ai-row-main';
+      var freqText = s.monthlyFreq >= 1
+        ? ('bought about ' + s.monthlyFreq + 'x a month')
+        : ('bought about every ' + Math.round(s.avg/30 * 10)/10 + ' months');
+      main.innerHTML = '<div class="ai-row-name">' + s.text + '</div>' +
+        '<div class="ai-row-meta">' + freqText + ' \u00b7 last bought ' + s.since + ' days ago' +
+        ' \u00b7 bought ' + s.timesBoughtTotal + ' times before</div>' +
+        '<span class="ai-badge ' + (s.overdue ? 'overdue">Likely finished' : 'due">Due soon') + '</span>';
+      main.onclick = check.onclick;
+      row.appendChild(check);
+      row.appendChild(main);
+      aiSuggestListEl.appendChild(row);
+    });
+    var count = Object.keys(aiSelectedKeys).length;
+    aiAddSelectedBtn.style.display = 'block';
+    aiAddSelectedBtn.textContent = count > 0 ? ('Add ' + count + ' selected item' + (count > 1 ? 's' : '')) : 'Select items to add';
+    aiAddSelectedBtn.disabled = count === 0;
+    aiAddSelectedBtn.style.opacity = count === 0 ? '0.5' : '1';
+  }
+
+  aiSuggestBtn.onclick = function(){
+    aiSuggestPanel.classList.toggle('open');
+    if(aiSuggestPanel.classList.contains('open')){
+      aiSelectedKeys = {};
+      renderAiSuggestPanel();
+    }
+  };
+
+  aiAddSelectedBtn.onclick = function(){
+    var texts = Object.values(aiSelectedKeys);
+    texts.forEach(function(t){ addItem(t); });
+    showToast('Added ' + texts.length + ' item' + (texts.length > 1 ? 's' : ''));
+    aiSelectedKeys = {};
+    renderAiSuggestPanel();
+  };
 
   var expenseBtn = document.getElementById('expenseBtn');
   var expensePanel = document.getElementById('expensePanel');
