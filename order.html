@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Order - PARCHI</title>
+<meta property="og:title" content="Tap to enter prices" />
+<meta property="og:description" content="Enter the price for each item and send the total back on WhatsApp." />
+<meta property="og:type" content="website" />
 <link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -111,6 +114,35 @@
       return String.fromCharCode('0x' + p1);
     }));
   }
+  async function compressToUrlSafe(str){
+    if(!window.CompressionStream) return null;
+    try{
+      var stream = new Blob([str]).stream().pipeThrough(new CompressionStream('gzip'));
+      var blob = await new Response(stream).blob();
+      var buffer = await blob.arrayBuffer();
+      var bytes = new Uint8Array(buffer);
+      var binary = '';
+      bytes.forEach(function(b){ binary += String.fromCharCode(b); });
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }catch(e){
+      return null;
+    }
+  }
+  async function decompressFromUrlSafe(s){
+    if(!window.DecompressionStream) return null;
+    try{
+      s = s.replace(/-/g, '+').replace(/_/g, '/');
+      while(s.length % 4) s += '=';
+      var binary = atob(s);
+      var bytes = new Uint8Array(binary.length);
+      for(var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      var blob = await new Response(stream).blob();
+      return await blob.text();
+    }catch(e){
+      return null;
+    }
+  }
 
   var toastEl = document.getElementById('toast');
   function showToast(msg){
@@ -118,15 +150,13 @@
     toastEl.classList.add('show');
     setTimeout(function(){ toastEl.classList.remove('show'); }, 1800);
   }
+  function esc(s){
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
 
   var CATEGORY_NAMES = { 'V':'Vegetables', 'G':'Groceries', 'S':'Sanitary and household', 'E':'Other essentials', 'O':'Other items' };
-
-  var params = new URLSearchParams(window.location.search);
-  var d = params.get('d');
-  var data = null;
-  try{
-    if(d) data = JSON.parse(b64DecodeUnicode(decodeURIComponent(d)));
-  }catch(e){ data = null; }
 
   var itemsArea = document.getElementById('itemsArea');
   var fromCard = document.getElementById('fromCard');
@@ -138,10 +168,26 @@
   var sendBtn = document.getElementById('sendBtn');
   var copyBtn = document.getElementById('copyBtn');
   var emptyMsg = document.getElementById('emptyMsg');
+  var data = null;
 
-  if(!data || !data.c || Object.keys(data.c).length === 0){
-    emptyMsg.style.display = 'block';
-  }else{
+  async function decodeIncomingData(){
+    var params = new URLSearchParams(window.location.search);
+    var d = params.get('d');
+    if(!d) return null;
+    if(d.charAt(0) === 'z'){
+      var jsonStr = await decompressFromUrlSafe(d.slice(1));
+      if(!jsonStr) return null;
+      try{ return JSON.parse(jsonStr); }catch(e){ return null; }
+    }else{
+      try{ return JSON.parse(b64DecodeUnicode(decodeURIComponent(d))); }catch(e){ return null; }
+    }
+  }
+
+  function renderOrderPage(){
+    if(!data || !data.c || Object.keys(data.c).length === 0){
+      emptyMsg.style.display = 'block';
+      return;
+    }
     if(data.n || data.m){
       var bits = [];
       if(data.n) bits.push('<div style="font-size:15px;">From: ' + esc(data.n) + '</div>');
@@ -157,7 +203,7 @@
       label.className = 'cat-label';
       label.textContent = cat;
       itemsArea.appendChild(label);
-      data.c[code].forEach(function(itemText, idx){
+      data.c[code].forEach(function(itemText){
         var row = document.createElement('div');
         row.className = 'item-row';
         var name = document.createElement('div');
@@ -188,12 +234,6 @@
     updateTotal();
   }
 
-  function esc(s){
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
-
   function updateTotal(){
     var total = 0;
     itemsArea.querySelectorAll('.item-amount').forEach(function(inp){
@@ -211,8 +251,8 @@
         body: 'url=' + encodeURIComponent(longUrl)
       });
       if(!resp.ok) throw new Error('bad response');
-      var data = await resp.json();
-      if(data && data.result_url) return data.result_url;
+      var respData = await resp.json();
+      if(respData && respData.result_url) return respData.result_url;
       throw new Error('no result_url');
     }catch(e){
       return longUrl;
@@ -252,7 +292,9 @@
         t: total,
         i: itemsForConfirm
       };
-      var encoded = encodeURIComponent(b64EncodeUnicode(JSON.stringify(confirmPayload)));
+      var jsonStr = JSON.stringify(confirmPayload);
+      var compressed = await compressToUrlSafe(jsonStr);
+      var encoded = compressed ? ('z' + compressed) : encodeURIComponent(b64EncodeUnicode(jsonStr));
       var confirmUrl = new URL('confirm.html', window.location.href).href + '?d=' + encoded;
       var shortConfirmUrl = await shortenUrl(confirmUrl);
       lines.push('');
@@ -284,6 +326,11 @@
       showToast('Could not copy automatically.');
     }
   };
+
+  (async function init(){
+    data = await decodeIncomingData();
+    renderOrderPage();
+  })();
 })();
 </script>
 </body>
