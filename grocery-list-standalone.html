@@ -756,11 +756,25 @@
     border-radius:14px; padding:14px 16px; font-weight:800; font-size:17px; color:var(--leaf); margin-bottom:16px;
   }
   .exp-chart{margin-bottom:18px;}
-  .exp-bar-row{margin-bottom:12px;}
-  .exp-bar-label{display:flex; justify-content:space-between; font-size:13px; font-weight:700; margin-bottom:4px;}
-  .exp-bar-label span:last-child{color:var(--muted);}
-  .exp-bar-track{background:var(--bg); border-radius:999px; height:12px; overflow:hidden;}
-  .exp-bar-fill{height:100%; border-radius:999px; background:var(--leaf);}
+  .exp-pie-wrap{display:flex; flex-direction:column; align-items:center; gap:18px;}
+  .exp-pie-circle{
+    width:190px; height:190px; border-radius:50%; position:relative; flex-shrink:0;
+    box-shadow:0 2px 10px rgba(45,80,22,0.10);
+  }
+  .exp-pie-hole{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    width:110px; height:110px; border-radius:50%; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .exp-pie-hole .exp-pie-total-label{font-size:11px; font-weight:700; color:var(--muted);}
+  .exp-pie-hole .exp-pie-total-value{font-size:16px; font-weight:800; color:var(--leaf);}
+  .exp-legend{width:100%;}
+  .exp-legend-row{display:flex; align-items:center; gap:8px; font-size:13px; font-weight:700; padding:7px 0; border-bottom:1px solid var(--line);}
+  .exp-legend-row:last-child{border-bottom:none;}
+  .exp-legend-dot{width:12px; height:12px; border-radius:50%; flex-shrink:0;}
+  .exp-legend-cat{flex:1;}
+  .exp-legend-pct{color:var(--muted); font-weight:700; width:40px; text-align:right;}
+  .exp-legend-amt{width:70px; text-align:right;}
   .exp-list-row{
     display:flex; align-items:center; gap:10px; background:var(--card); border:2px solid var(--line);
     border-radius:12px; padding:10px 12px; margin-bottom:8px;
@@ -1917,29 +1931,49 @@
     total = Math.round(total * 100) / 100;
     expTotalAmount.textContent = '\u20b9' + total;
 
-    var maxCat = Math.max.apply(null, EXP_CATEGORIES.map(function(c){ return byCat[c] || 0; }).concat([1]));
     expChart.innerHTML = '';
-    EXP_CATEGORIES.forEach(function(cat){
-      var val = Math.round((byCat[cat] || 0) * 100) / 100;
-      if(val === 0) return;
-      var row = document.createElement('div');
-      row.className = 'exp-bar-row';
-      var label = document.createElement('div');
-      label.className = 'exp-bar-label';
-      label.innerHTML = '<span>' + cat + '</span><span>\u20b9' + val + '</span>';
-      var track = document.createElement('div');
-      track.className = 'exp-bar-track';
-      var fill = document.createElement('div');
-      fill.className = 'exp-bar-fill';
-      fill.style.width = Math.max(4, Math.round((val / maxCat) * 100)) + '%';
-      fill.style.background = EXP_COLORS[cat] || 'var(--leaf)';
-      track.appendChild(fill);
-      row.appendChild(label);
-      row.appendChild(track);
-      expChart.appendChild(row);
-    });
-    if(filtered.length === 0){
+    if(total === 0 || filtered.length === 0){
       expChart.innerHTML = '<div class="no-history">No expenses recorded in this range yet.</div>';
+    }else{
+      var wrap = document.createElement('div');
+      wrap.className = 'exp-pie-wrap';
+
+      var gradientParts = [];
+      var cumPct = 0;
+      var legendRows = [];
+      EXP_CATEGORIES.forEach(function(cat){
+        var val = Math.round((byCat[cat] || 0) * 100) / 100;
+        if(val <= 0) return;
+        var pct = (val / total) * 100;
+        var color = EXP_COLORS[cat] || 'var(--leaf)';
+        gradientParts.push(color + ' ' + cumPct.toFixed(2) + '% ' + (cumPct + pct).toFixed(2) + '%');
+        cumPct += pct;
+        legendRows.push({ cat: cat, val: val, pct: pct, color: color });
+      });
+
+      var circle = document.createElement('div');
+      circle.className = 'exp-pie-circle';
+      circle.style.background = 'conic-gradient(' + gradientParts.join(', ') + ')';
+      var hole = document.createElement('div');
+      hole.className = 'exp-pie-hole';
+      hole.innerHTML = '<div class="exp-pie-total-label">Total</div><div class="exp-pie-total-value">\u20b9' + total + '</div>';
+      circle.appendChild(hole);
+
+      var legend = document.createElement('div');
+      legend.className = 'exp-legend';
+      legendRows.forEach(function(r){
+        var row = document.createElement('div');
+        row.className = 'exp-legend-row';
+        row.innerHTML = '<span class="exp-legend-dot" style="background:' + r.color + '"></span>' +
+          '<span class="exp-legend-cat">' + r.cat + '</span>' +
+          '<span class="exp-legend-pct">' + Math.round(r.pct) + '%</span>' +
+          '<span class="exp-legend-amt">\u20b9' + r.val + '</span>';
+        legend.appendChild(row);
+      });
+
+      wrap.appendChild(circle);
+      wrap.appendChild(legend);
+      expChart.appendChild(wrap);
     }
 
     expList.innerHTML = '';
