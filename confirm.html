@@ -111,6 +111,15 @@
   try{
     if(d) data = JSON.parse(b64DecodeUnicode(d));
   }catch(e){ data = null; }
+  if(data){
+    data = {
+      shopName: data.sn !== undefined ? data.sn : data.shopName,
+      shopMobile: data.sm !== undefined ? data.sm : data.shopMobile,
+      customerName: data.cn !== undefined ? data.cn : data.customerName,
+      total: data.t !== undefined ? data.t : data.total,
+      items: data.i !== undefined ? data.i : data.items
+    };
+  }
 
   var shopCard = document.getElementById('shopCard');
   var itemsCard = document.getElementById('itemsCard');
@@ -144,19 +153,24 @@
     var mobile = (data.shopMobile || '').replace(/[^0-9]/g, '');
     if(mobile.length === 10) mobile = '91' + mobile;
     var hasMobile = mobile.length >= 11;
-    if(!hasMobile) copyBtn.style.display = 'block';
+    copyBtn.style.display = 'block';
+    copyBtn.textContent = hasMobile ? 'Copy reply message' : 'Copy reply message (no shop number was shared)';
 
     function sendReply(confirmed){
       var text = (confirmed ? 'Order confirmed! Please dispatch the items.' : 'Sorry, please cancel this order.') +
         '\nTotal: \u20b9' + data.total +
         (data.customerName ? ('\nFrom: ' + data.customerName) : '');
       if(hasMobile){
-        window.location.href = 'https://wa.me/' + mobile + '?text=' + encodeURIComponent(text);
+        try{
+          window.location.href = 'https://wa.me/' + mobile + '?text=' + encodeURIComponent(text);
+        }catch(e){
+          showToast('Could not open WhatsApp. Try "Copy reply message" instead.');
+        }
       }else{
         navigator.clipboard.writeText(text).then(function(){
           showToast('Copied — paste it in your reply to the shop');
         }).catch(function(){
-          showToast('Could not copy automatically.');
+          showToast('Could not copy automatically. Try again.');
         });
       }
     }
@@ -164,9 +178,14 @@
     yesBtn.onclick = function(){ sendReply(true); };
     noBtn.onclick = function(){ sendReply(false); };
     copyBtn.onclick = function(){
-      navigator.clipboard.writeText('Total: \u20b9' + data.total).then(function(){
-        showToast('Copied to clipboard');
-      }).catch(function(){});
+      var text = 'Order confirmed! Please dispatch the items.' +
+        '\nTotal: \u20b9' + data.total +
+        (data.customerName ? ('\nFrom: ' + data.customerName) : '');
+      navigator.clipboard.writeText(text).then(function(){
+        showToast('Copied — paste it in your reply to the shop');
+      }).catch(function(){
+        showToast('Could not copy automatically.');
+      });
     };
   }
 })();
