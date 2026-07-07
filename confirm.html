@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Confirm Order - PARCHI</title>
+<meta property="og:title" content="Tap to confirm your order" />
+<meta property="og:description" content="Review the price and total, then confirm or cancel with one tap." />
+<meta property="og:type" content="website" />
 <link rel="icon" href="data:,">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -92,6 +95,21 @@
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
   }
+  async function decompressFromUrlSafe(s){
+    if(!window.DecompressionStream) return null;
+    try{
+      s = s.replace(/-/g, '+').replace(/_/g, '/');
+      while(s.length % 4) s += '=';
+      var binary = atob(s);
+      var bytes = new Uint8Array(binary.length);
+      for(var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      var blob = await new Response(stream).blob();
+      return await blob.text();
+    }catch(e){
+      return null;
+    }
+  }
 
   var toastEl = document.getElementById('toast');
   function showToast(msg){
@@ -105,22 +123,6 @@
     return d.innerHTML;
   }
 
-  var params = new URLSearchParams(window.location.search);
-  var d = params.get('d');
-  var data = null;
-  try{
-    if(d) data = JSON.parse(b64DecodeUnicode(d));
-  }catch(e){ data = null; }
-  if(data){
-    data = {
-      shopName: data.sn !== undefined ? data.sn : data.shopName,
-      shopMobile: data.sm !== undefined ? data.sm : data.shopMobile,
-      customerName: data.cn !== undefined ? data.cn : data.customerName,
-      total: data.t !== undefined ? data.t : data.total,
-      items: data.i !== undefined ? data.i : data.items
-    };
-  }
-
   var shopCard = document.getElementById('shopCard');
   var itemsCard = document.getElementById('itemsCard');
   var totalRow = document.getElementById('totalRow');
@@ -130,10 +132,36 @@
   var noBtn = document.getElementById('noBtn');
   var copyBtn = document.getElementById('copyBtn');
   var emptyMsg = document.getElementById('emptyMsg');
+  var data = null;
 
-  if(!data || typeof data.total === 'undefined'){
-    emptyMsg.style.display = 'block';
-  }else{
+  async function decodeIncomingData(){
+    var params = new URLSearchParams(window.location.search);
+    var d = params.get('d');
+    if(!d) return null;
+    var raw = null;
+    if(d.charAt(0) === 'z'){
+      var jsonStr = await decompressFromUrlSafe(d.slice(1));
+      if(jsonStr){
+        try{ raw = JSON.parse(jsonStr); }catch(e){ raw = null; }
+      }
+    }else{
+      try{ raw = JSON.parse(b64DecodeUnicode(d)); }catch(e){ raw = null; }
+    }
+    if(!raw) return null;
+    return {
+      shopName: raw.sn !== undefined ? raw.sn : raw.shopName,
+      shopMobile: raw.sm !== undefined ? raw.sm : raw.shopMobile,
+      customerName: raw.cn !== undefined ? raw.cn : raw.customerName,
+      total: raw.t !== undefined ? raw.t : raw.total,
+      items: raw.i !== undefined ? raw.i : raw.items
+    };
+  }
+
+  function renderConfirmPage(){
+    if(!data || typeof data.total === 'undefined'){
+      emptyMsg.style.display = 'block';
+      return;
+    }
     if(data.shopName){
       shopCard.innerHTML = '<div style="font-size:15px;">From: ' + esc(data.shopName) + '</div>';
       shopCard.style.display = 'block';
@@ -188,6 +216,11 @@
       });
     };
   }
+
+  (async function init(){
+    data = await decodeIncomingData();
+    renderConfirmPage();
+  })();
 })();
 </script>
 </body>
