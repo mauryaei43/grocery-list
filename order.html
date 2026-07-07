@@ -250,7 +250,7 @@
       var confirmUrl = new URL('confirm.html', window.location.href).href + '?d=' + encoded;
       var shortConfirmUrl = await shortenUrl(confirmUrl);
       lines.push('');
-      lines.push('Confirm order: ' + shortConfirmUrl);
+      lines.push('Please find pricing and total amount: ' + shortConfirmUrl);
     }
     return lines.join('\n');
   }
