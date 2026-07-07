@@ -30,9 +30,14 @@
     display:flex; align-items:center; gap:10px; background:var(--card);
     border:2px solid var(--line); border-radius:14px; padding:10px 12px; margin-bottom:8px;
   }
-  .item-name{flex:1; font-size:15px; font-weight:700;}
+  .item-name{flex:1; font-size:15px; font-weight:700; min-width:0;}
+  .item-qty{
+    width:64px; height:42px; border-radius:10px; border:2px solid var(--line);
+    padding:0 8px; font-size:14px; font-family:inherit; text-align:center;
+  }
+  .item-qty:focus{outline:none; border-color:var(--leaf-light);}
   .item-amount{
-    width:90px; height:42px; border-radius:10px; border:2px solid var(--line);
+    width:80px; height:42px; border-radius:10px; border:2px solid var(--line);
     padding:0 10px; font-size:15px; font-family:inherit; text-align:right;
   }
   .item-amount:focus{outline:none; border-color:var(--leaf-light);}
@@ -132,6 +137,11 @@
         var name = document.createElement('div');
         name.className = 'item-name';
         name.textContent = itemText;
+        var qty = document.createElement('input');
+        qty.className = 'item-qty';
+        qty.type = 'text';
+        qty.placeholder = 'Qty';
+        qty.dataset.name = itemText;
         var amt = document.createElement('input');
         amt.className = 'item-amount';
         amt.type = 'number';
@@ -140,6 +150,7 @@
         amt.addEventListener('input', updateTotal);
         amt.dataset.name = itemText;
         row.appendChild(name);
+        row.appendChild(qty);
         row.appendChild(amt);
         itemsArea.appendChild(row);
       });
@@ -169,15 +180,24 @@
   function buildReplyText(){
     var lines = ['Price reply' + (data.name ? (' for ' + data.name) : '') + ':', ''];
     var total = 0;
-    itemsArea.querySelectorAll('.item-amount').forEach(function(inp){
-      var v = parseFloat(inp.value);
+    itemsArea.querySelectorAll('.item-row').forEach(function(row){
+      var amtInp = row.querySelector('.item-amount');
+      var qtyInp = row.querySelector('.item-qty');
+      if(!amtInp) return;
+      var v = parseFloat(amtInp.value);
+      var qtyVal = qtyInp ? qtyInp.value.trim() : '';
       if(!isNaN(v) && v > 0){
-        lines.push(inp.dataset.name + ' - \u20b9' + v);
+        var line = amtInp.dataset.name;
+        if(qtyVal) line += ' - Qty: ' + qtyVal;
+        line += ' - \u20b9' + v;
+        lines.push(line);
         total += v;
       }
     });
     lines.push('');
     lines.push('Total: \u20b9' + (Math.round(total * 100) / 100));
+    lines.push('');
+    lines.push('Thank you so much for choosing us for your shopping!');
     return lines.join('\n');
   }
 
