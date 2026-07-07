@@ -119,6 +119,8 @@
     setTimeout(function(){ toastEl.classList.remove('show'); }, 1800);
   }
 
+  var CATEGORY_NAMES = { 'V':'Vegetables', 'G':'Groceries', 'S':'Sanitary and household', 'E':'Other essentials', 'O':'Other items' };
+
   var params = new URLSearchParams(window.location.search);
   var d = params.get('d');
   var data = null;
@@ -137,25 +139,25 @@
   var copyBtn = document.getElementById('copyBtn');
   var emptyMsg = document.getElementById('emptyMsg');
 
-  if(!data || !data.cats || Object.keys(data.cats).length === 0){
+  if(!data || !data.c || Object.keys(data.c).length === 0){
     emptyMsg.style.display = 'block';
   }else{
-    if(data.name || data.mobile || data.address){
+    if(data.n || data.m){
       var bits = [];
-      if(data.name) bits.push('<div style="font-size:15px;">From: ' + esc(data.name) + '</div>');
-      if(data.mobile) bits.push('<div>Mobile: ' + esc(data.mobile) + '</div>');
-      if(data.address) bits.push('<div>Address: ' + esc(data.address) + '</div>');
+      if(data.n) bits.push('<div style="font-size:15px;">From: ' + esc(data.n) + '</div>');
+      if(data.m) bits.push('<div>Mobile: ' + esc(data.m) + '</div>');
       fromCard.innerHTML = bits.join('');
       fromCard.style.display = 'block';
     }
     shopFieldsCard.style.display = 'block';
 
-    Object.keys(data.cats).forEach(function(cat){
+    Object.keys(data.c).forEach(function(code){
+      var cat = CATEGORY_NAMES[code] || code;
       var label = document.createElement('div');
       label.className = 'cat-label';
       label.textContent = cat;
       itemsArea.appendChild(label);
-      data.cats[cat].forEach(function(itemText, idx){
+      data.c[code].forEach(function(itemText, idx){
         var row = document.createElement('div');
         row.className = 'item-row';
         var name = document.createElement('div');
@@ -218,7 +220,7 @@
   }
 
   async function buildReplyText(){
-    var lines = ['Price reply' + (data.name ? (' for ' + data.name) : '') + ':', ''];
+    var lines = ['Price reply' + (data.n ? (' for ' + data.n) : '') + ':', ''];
     var total = 0;
     var itemsForConfirm = [];
     itemsArea.querySelectorAll('.item-row').forEach(function(row){
@@ -244,11 +246,11 @@
 
     if(total > 0){
       var confirmPayload = {
-        shopName: shopName.value.trim(),
-        shopMobile: shopMobile.value.trim(),
-        customerName: data.name || '',
-        total: total,
-        items: itemsForConfirm
+        sn: shopName.value.trim(),
+        sm: shopMobile.value.trim(),
+        cn: data.n || '',
+        t: total,
+        i: itemsForConfirm
       };
       var encoded = encodeURIComponent(b64EncodeUnicode(JSON.stringify(confirmPayload)));
       var confirmUrl = new URL('confirm.html', window.location.href).href + '?d=' + encoded;
@@ -264,7 +266,7 @@
     showToast('Preparing your reply...');
     var text = await buildReplyText();
     sendBtn.disabled = false;
-    var mobile = (data.mobile || '').replace(/[^0-9]/g, '');
+    var mobile = (data.m || '').replace(/[^0-9]/g, '');
     if(mobile.length === 10) mobile = '91' + mobile;
     if(mobile.length >= 11){
       window.location.href = 'https://wa.me/' + mobile + '?text=' + encodeURIComponent(text);
